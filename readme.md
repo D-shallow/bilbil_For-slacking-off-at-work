@@ -9,6 +9,9 @@
 
 ---
 
+## 运行环境
+https://nodejs.org/zh-cn/download
+
 ## For Developers
 
 ```
@@ -23,6 +26,7 @@ npm run win64
 npm run win32
 npm run mac
 ```
+---
 
 ## > **致谢 / Acknowledgements**
 
