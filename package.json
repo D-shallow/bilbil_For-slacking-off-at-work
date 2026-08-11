@@ -1,0 +1,33 @@
+{
+  "name": "bilimini",
+  "version": "1.5.7",
+  "description": "Hide!bilibili",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "win64": "./node_modules/.bin/electron-builder --x64",
+    "win32": "./node_modules/.bin/electron-builder --ia32",
+    "mac": "./node_modules/.bin/electron-builder --mac",
+    "linux": "./node_modules/.bin/electron-builder --linux appimage"
+  },
+  "repository": "https://github.com/chitosai/bilimini",
+  "author": "TheC",
+  "devDependencies": {
+    "electron": "^13.6.6",
+    "electron-builder": "^22.9.1"
+  },
+  "build": {
+    "mac": {
+      "category": "Network"
+    },
+    "linux": {
+      "category": "Network",
+      "icon": "build/icon256.png"
+    }
+  },
+  "dependencies": {
+    "electron-is-accelerator": "^0.1.2",
+    "electron-store": "^8.0.1",
+    "graceful-fs": "^4.2.6"
+  }
+}
