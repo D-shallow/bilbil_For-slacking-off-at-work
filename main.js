@@ -382,7 +382,8 @@ function initGlobalShortcut() {
   bindGlobalShortcut();
 }
 // ==========================================
-// --- 右键+重新导航---
+// --- 右键+重新导航 ---
+// ==========================================
 app.on('web-contents-created', (e, contents) => {
   contents.on('context-menu', (event, params) => {
     const contextMenu = Menu.buildFromTemplate([
@@ -414,7 +415,7 @@ app.on('web-contents-created', (e, contents) => {
   });
 });
 
-// 🎯 全局双向导航监听（带智能重试保护）
+// 🎯 全局双向导航监听
 app.on('web-contents-created', (e, contents) => {
   contents.on('did-navigate', (event, url) => {
     
@@ -423,20 +424,20 @@ app.on('web-contents-created', (e, contents) => {
       return;
     }
     
+    // -----------------------------------------
     // 1. 如果切到了【关注动态】页面
+    // -----------------------------------------
     if (url.includes('t.bilibili.com')) {
       contents.executeJavaScript(`
         document.body.innerHTML = '<h3 style="padding:20px; text-align:center; color:#999;">正在获取关注动态...</h3>';
         document.body.style.zoom = '1'; 
         
-        // 封装一个带重试的请求函数，防止刚登录完 Cookie 没同步
         function fetchDynamic(retry = 2) {
             fetch('https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=video')
               .then(res => res.json())
               .then(res => {
                 if(res.code !== 0 || !res.data) {
                   if (retry > 0) {
-                      // 如果失败了，等 1 秒重试一次（等待 Cookie 生效）
                       setTimeout(() => fetchDynamic(retry - 1), 1000);
                       return;
                   }
@@ -468,8 +469,9 @@ app.on('web-contents-created', (e, contents) => {
                     const upName = module_author.name;
                     const upFace = module_author.face;
                     
+                    // 🎯 核心修改：将跳转链接强制改为电脑版 www.bilibili.com/video/xxx
                     html += \`
-                      <div onclick="window.location.href='https://m.bilibili.com/video/\${bvid}'" 
+                      <div onclick="window.location.href='https://www.bilibili.com/video/\${bvid}'" 
                            style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
                         <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
                           <img src="\${cover}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
@@ -507,7 +509,9 @@ app.on('web-contents-created', (e, contents) => {
       `);
     }
     
+    // -----------------------------------------
     // 2. 如果切到了【稍后再看】页面
+    // -----------------------------------------
     if (url.includes('watchlater')) {
       contents.executeJavaScript(`
         document.body.innerHTML = '<h3 style="padding:20px; text-align:center; color:#999;">正在获取摸鱼专属列表...</h3>';
@@ -535,8 +539,9 @@ app.on('web-contents-created', (e, contents) => {
                 let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
                 
                 list.forEach(video => {
+                  // 稍后再看也同步改为电脑版播放链接
                   html += \`
-                    <div onclick="window.location.href='https://m.bilibili.com/video/\${video.bvid}'" 
+                    <div onclick="window.location.href='https://www.bilibili.com/video/\${video.bvid}'" 
                          style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
                       <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
                         <img src="\${video.pic}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
@@ -571,8 +576,24 @@ app.on('web-contents-created', (e, contents) => {
         fetchWatchLater();
       `);
     }
+
+    // -----------------------------------------
+    // 3. 🛡️ 如果切到了【视频播放页】（净化电脑版视频页）
+    // -----------------------------------------
+    if (url.includes('/video/')) {
+      contents.executeJavaScript(`
+        var antiAdStyle = document.createElement('style');
+        antiAdStyle.innerHTML = \`
+          /* 隐藏电脑版多余的推荐、评论区顶部的引导下载等 */
+          .international-header, .bili-header, .right-container, .pop-live-small-mode {
+              display: none !important;
+          }
+          body { background: #f4f4f4 !important; }
+        \`;
+        document.head.appendChild(antiAdStyle);
+      `);
+    }
     
   });
 });
 // ==========================================
-
