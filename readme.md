@@ -1,6 +1,6 @@
-# bilimini（摸鱼自用版）
+# bilimini（上班摸鱼自用版）
 
-* **右键菜单配置**
+* **右键菜单配置**：🌟 关注动态、📺 我的稍后再看、🏠 返回 B 站首页
 * **修复无边框拖拽失效问题**
 * **减少白屏崩溃**
 * **修复失效按键** esc返回、←后退、→前进、↑增加音量、↓减少音量、F1老板键、空格暂停/播放。
@@ -31,7 +31,7 @@ npm run mac
 ```
 ---
 
-##  **致谢 / Acknowledgements**
+##  **Acknowledgements**
 
-> 本项目是基于原作者开源的桌面悬浮摸鱼项目 (https://github.com/chitosai/bilimini#for-developers)进行的二次开发与修复版本。
+本项目是基于原作者开源的桌面悬浮摸鱼项目 (https://github.com/chitosai/bilimini#for-developers)进行的二次开发与修复版本。
 
