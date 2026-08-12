@@ -18,6 +18,7 @@ https://nodejs.org/zh-cn/download
 $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
 npm install
 ```
+```
 npm start
 ```
 
