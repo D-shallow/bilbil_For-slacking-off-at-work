@@ -382,7 +382,8 @@ function initGlobalShortcut() {
   bindGlobalShortcut();
 }
 // ==========================================
-// --- 新增：右键菜单+返回重新导航 ---
+// ---右键+双向自动重绘版 ---
+// ==========================================
 app.on('web-contents-created', (e, contents) => {
   contents.on('context-menu', (event, params) => {
     const contextMenu = Menu.buildFromTemplate([
@@ -403,6 +404,11 @@ app.on('web-contents-created', (e, contents) => {
         click: () => {
           contents.loadURL('https://m.bilibili.com/'); 
         }
+      },
+      { type: 'separator' },
+      {
+        label: '✨ D-shallow',
+        enabled: false
       }
     ]);
     contextMenu.popup();
