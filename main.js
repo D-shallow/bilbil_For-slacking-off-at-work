@@ -36,18 +36,13 @@ function openMainWindow() {
     utils.log('主窗口：原主窗口已关闭');
   }
   // 根据透明度设置决定是否要创建transparent窗口
-  // 不论在windows还是在mac下，正常窗口都会比transparent窗口多一个好看的阴影
-  // 所以我们不希望为了方便始终使用transparent
   var opacity = utils.config.get('opacity'),
       windowParams = {width: 375, height: 500, frame: false};
   if( opacity < 1 ) {
     windowParams.transparent = true;
     windowParams.opacity = opacity;
   }
-  // 新增两个参数，第一是electron 5.0的安全性要求 ↓
-  // https://www.electronjs.org/docs/tutorial/security#2-do-not-enable-nodejs-integration-for-remote-content
-  // 但是这个参数对架构改动实在太大了，根本不想改。而且bilimini限制了代码只访问b站域名的内容，大体上不会有太多安全问题，所以直接把这个安全要求忽略掉了
-  // 第二个参数是webview在5.0里默认被禁用了，又是个breaking change。。我人都傻了
+  
   windowParams.webPreferences = {
     nodeIntegration: true,
     webviewTag: true,
@@ -59,7 +54,6 @@ function openMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     utils.log('主窗口：已关闭');
-    // 主窗口关闭后如果3s都没有重新创建，就认为程序是被不正常退出了（例如windows下直接alt+f4），关闭整个程序
     if( platform != 'darwin' ) {
       mainWindowIsClosed = setTimeout(() => {
         utils.log('主窗口：关闭超过 3s 未重新创建，程序自动退出');
@@ -69,7 +63,6 @@ function openMainWindow() {
   });
   clearTimeout(mainWindowIsClosed);
   utils.log('主窗口：已创建');
-  // mainWindow.webContents.openDevTools();
 }
 
 function initMainWindow() {
@@ -388,3 +381,151 @@ function initGlobalShortcut() {
   });
   bindGlobalShortcut();
 }
+// ==========================================
+// --- 新增：右键菜单+返回重新导航 ---
+app.on('web-contents-created', (e, contents) => {
+  contents.on('context-menu', (event, params) => {
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: '🌟 关注动态',
+        click: () => {
+          contents.loadURL('https://t.bilibili.com/'); 
+        }
+      },
+      {
+        label: '📺 我的稍后再看',
+        click: () => {
+          contents.loadURL('https://www.bilibili.com/watchlater/#/list');
+        }
+      },
+      {
+        label: '🏠 返回 B 站首页',
+        click: () => {
+          contents.loadURL('https://m.bilibili.com/'); 
+        }
+      }
+    ]);
+    contextMenu.popup();
+  });
+});
+
+// 🎯 全局双向导航监听：无论点哪个页面，只要切回来就自动重绘！
+app.on('web-contents-created', (e, contents) => {
+  contents.on('did-navigate', (event, url) => {
+    
+    // 1. 如果切到了【关注动态】页面
+    if (url.includes('t.bilibili.com')) {
+      contents.executeJavaScript(`
+        document.body.innerHTML = '<h3 style="padding:20px; text-align:center; color:#999;">正在获取关注动态...</h3>';
+        document.body.style.zoom = '1'; 
+        
+        fetch('https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=video')
+          .then(res => res.json())
+          .then(res => {
+            if(res.code !== 0 || !res.data) {
+              document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">获取动态失败，请确保您已登录B站</h3>';
+              return;
+            }
+            
+            const items = res.data.items || [];
+            let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
+            
+            items.forEach(item => {
+              const module_author = item.modules.module_author;
+              const module_dynamic = item.modules.module_dynamic;
+              
+              if (!module_dynamic || !module_dynamic.major) return;
+              const major = module_dynamic.major;
+              
+              if (major.type === 'MAJOR_TYPE_ARCHIVE') {
+                const archive = major.archive;
+                const title = archive.title;
+                const cover = archive.cover;
+                const bvid = archive.bvid;
+                const duration = archive.duration_text;
+                const upName = module_author.name;
+                const upFace = module_author.face;
+                
+                html += \`
+                  <div onclick="window.location.href='https://m.bilibili.com/video/\${bvid}'" 
+                       style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                    <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
+                      <img src="\${cover}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
+                      <span style="position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">
+                        \${duration}
+                      </span>
+                    </div>
+                    <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
+                      <div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">
+                        \${title}
+                      </div>
+                      <div style="display:flex; align-items:center; font-size:12px; color:#999; margin-top:4px;">
+                        <img src="\${upFace}@50w.jpg" style="width:16px; height:16px; border-radius:50%; margin-right:4px;">
+                        <span>\${upName}</span>
+                      </div>
+                    </div>
+                  </div>
+                \`;
+              }
+            });
+            
+            html += '</div>';
+            document.body.innerHTML = html;
+          })
+          .catch(err => {
+            document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
+          });
+      `);
+    }
+    
+    // 2. 如果切到了【稍后再看】页面
+    if (url.includes('watchlater')) {
+      contents.executeJavaScript(`
+        document.body.innerHTML = '<h3 style="padding:20px; text-align:center; color:#999;">正在获取摸鱼专属列表...</h3>';
+        document.body.style.zoom = '1'; 
+        
+        fetch('https://api.bilibili.com/x/v2/history/toview/web')
+          .then(res => res.json())
+          .then(res => {
+            if(res.code !== 0) {
+              document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">获取失败，请确保您已登录B站</h3>';
+              return;
+            }
+            
+            const list = res.data.list;
+            let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
+            
+            list.forEach(video => {
+              html += \`
+                <div onclick="window.location.href='https://m.bilibili.com/video/\${video.bvid}'" 
+                     style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                  <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
+                    <img src="\${video.pic}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
+                    <span style="position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">
+                      \${Math.floor(video.duration/60)}:\${(video.duration%60).toString().padStart(2,'0')}
+                    </span>
+                  </div>
+                  <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
+                    <div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">
+                      \${video.title}
+                    </div>
+                    <div style="font-size:12px; color:#999;">
+                      UP: \${video.owner.name}
+                    </div>
+                  </div>
+                </div>
+              \`;
+            });
+            
+            html += '</div>';
+            document.body.innerHTML = html;
+          })
+          .catch(err => {
+            document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
+          });
+      `);
+    }
+    
+  });
+});
+// ==========================================
