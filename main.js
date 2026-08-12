@@ -382,8 +382,7 @@ function initGlobalShortcut() {
   bindGlobalShortcut();
 }
 // ==========================================
-// ---右键+双向自动重绘版 ---
-// ==========================================
+// --- 右键+重新导航---
 app.on('web-contents-created', (e, contents) => {
   contents.on('context-menu', (event, params) => {
     const contextMenu = Menu.buildFromTemplate([
@@ -415,9 +414,14 @@ app.on('web-contents-created', (e, contents) => {
   });
 });
 
-// 🎯 全局双向导航监听：无论点哪个页面，只要切回来就自动重绘！
+// 🎯 全局双向导航监听（带智能重试保护）
 app.on('web-contents-created', (e, contents) => {
   contents.on('did-navigate', (event, url) => {
+    
+    // 如果在登录页，绝对不干扰
+    if (url.includes('passport.bilibili.com')) {
+      return;
+    }
     
     // 1. 如果切到了【关注动态】页面
     if (url.includes('t.bilibili.com')) {
@@ -425,62 +429,81 @@ app.on('web-contents-created', (e, contents) => {
         document.body.innerHTML = '<h3 style="padding:20px; text-align:center; color:#999;">正在获取关注动态...</h3>';
         document.body.style.zoom = '1'; 
         
-        fetch('https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=video')
-          .then(res => res.json())
-          .then(res => {
-            if(res.code !== 0 || !res.data) {
-              document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">获取动态失败，请确保您已登录B站</h3>';
-              return;
-            }
-            
-            const items = res.data.items || [];
-            let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
-            
-            items.forEach(item => {
-              const module_author = item.modules.module_author;
-              const module_dynamic = item.modules.module_dynamic;
-              
-              if (!module_dynamic || !module_dynamic.major) return;
-              const major = module_dynamic.major;
-              
-              if (major.type === 'MAJOR_TYPE_ARCHIVE') {
-                const archive = major.archive;
-                const title = archive.title;
-                const cover = archive.cover;
-                const bvid = archive.bvid;
-                const duration = archive.duration_text;
-                const upName = module_author.name;
-                const upFace = module_author.face;
+        // 封装一个带重试的请求函数，防止刚登录完 Cookie 没同步
+        function fetchDynamic(retry = 2) {
+            fetch('https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/all?timezone_offset=-480&type=video')
+              .then(res => res.json())
+              .then(res => {
+                if(res.code !== 0 || !res.data) {
+                  if (retry > 0) {
+                      // 如果失败了，等 1 秒重试一次（等待 Cookie 生效）
+                      setTimeout(() => fetchDynamic(retry - 1), 1000);
+                      return;
+                  }
+                  document.body.innerHTML = \`
+                    <div style="padding:40px; text-align:center;">
+                      <h3 style="color:red; margin-bottom:15px;">尚未登录或登录态未生效</h3>
+                      <a href="https://passport.bilibili.com/login" style="display:inline-block; padding:10px 20px; background:#00aeec; color:#fff; text-decoration:none; border-radius:4px; font-weight:bold;">点此前往登录 B 站</a>
+                    </div>
+                  \`;
+                  return;
+                }
                 
-                html += \`
-                  <div onclick="window.location.href='https://m.bilibili.com/video/\${bvid}'" 
-                       style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
-                    <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
-                      <img src="\${cover}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
-                      <span style="position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">
-                        \${duration}
-                      </span>
-                    </div>
-                    <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
-                      <div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">
-                        \${title}
+                const items = res.data.items || [];
+                let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
+                
+                items.forEach(item => {
+                  const module_author = item.modules.module_author;
+                  const module_dynamic = item.modules.module_dynamic;
+                  
+                  if (!module_dynamic || !module_dynamic.major) return;
+                  const major = module_dynamic.major;
+                  
+                  if (major.type === 'MAJOR_TYPE_ARCHIVE') {
+                    const archive = major.archive;
+                    const title = archive.title;
+                    const cover = archive.cover;
+                    const bvid = archive.bvid;
+                    const duration = archive.duration_text;
+                    const upName = module_author.name;
+                    const upFace = module_author.face;
+                    
+                    html += \`
+                      <div onclick="window.location.href='https://m.bilibili.com/video/\${bvid}'" 
+                           style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                        <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
+                          <img src="\${cover}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
+                          <span style="position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">
+                            \${duration}
+                          </span>
+                        </div>
+                        <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
+                          <div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">
+                            \${title}
+                          </div>
+                          <div style="display:flex; align-items:center; font-size:12px; color:#999; margin-top:4px;">
+                            <img src="\${upFace}@50w.jpg" style="width:16px; height:16px; border-radius:50%; margin-right:4px;">
+                            <span>\${upName}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div style="display:flex; align-items:center; font-size:12px; color:#999; margin-top:4px;">
-                        <img src="\${upFace}@50w.jpg" style="width:16px; height:16px; border-radius:50%; margin-right:4px;">
-                        <span>\${upName}</span>
-                      </div>
-                    </div>
-                  </div>
-                \`;
-              }
-            });
-            
-            html += '</div>';
-            document.body.innerHTML = html;
-          })
-          .catch(err => {
-            document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
-          });
+                    \`;
+                  }
+                });
+                
+                html += '</div>';
+                document.body.innerHTML = html;
+              })
+              .catch(err => {
+                if (retry > 0) {
+                    setTimeout(() => fetchDynamic(retry - 1), 1000);
+                } else {
+                    document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
+                }
+              });
+        }
+        
+        fetchDynamic();
       `);
     }
     
@@ -490,48 +513,66 @@ app.on('web-contents-created', (e, contents) => {
         document.body.innerHTML = '<h3 style="padding:20px; text-align:center; color:#999;">正在获取摸鱼专属列表...</h3>';
         document.body.style.zoom = '1'; 
         
-        fetch('https://api.bilibili.com/x/v2/history/toview/web')
-          .then(res => res.json())
-          .then(res => {
-            if(res.code !== 0) {
-              document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">获取失败，请确保您已登录B站</h3>';
-              return;
-            }
-            
-            const list = res.data.list;
-            let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
-            
-            list.forEach(video => {
-              html += \`
-                <div onclick="window.location.href='https://m.bilibili.com/video/\${video.bvid}'" 
-                     style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
-                  <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
-                    <img src="\${video.pic}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
-                    <span style="position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">
-                      \${Math.floor(video.duration/60)}:\${(video.duration%60).toString().padStart(2,'0')}
-                    </span>
-                  </div>
-                  <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
-                    <div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">
-                      \${video.title}
+        function fetchWatchLater(retry = 2) {
+            fetch('https://api.bilibili.com/x/v2/history/toview/web')
+              .then(res => res.json())
+              .then(res => {
+                if(res.code !== 0) {
+                  if (retry > 0) {
+                      setTimeout(() => fetchWatchLater(retry - 1), 1000);
+                      return;
+                  }
+                  document.body.innerHTML = \`
+                    <div style="padding:40px; text-align:center;">
+                      <h3 style="color:red; margin-bottom:15px;">尚未登录或登录态未生效</h3>
+                      <a href="https://passport.bilibili.com/login" style="display:inline-block; padding:10px 20px; background:#00aeec; color:#fff; text-decoration:none; border-radius:4px; font-weight:bold;">点此前往登录 B 站</a>
                     </div>
-                    <div style="font-size:12px; color:#999;">
-                      UP: \${video.owner.name}
+                  \`;
+                  return;
+                }
+                
+                const list = res.data.list;
+                let html = '<div style="padding:10px; background:#f4f4f4; min-height:100vh; box-sizing:border-box;">';
+                
+                list.forEach(video => {
+                  html += \`
+                    <div onclick="window.location.href='https://m.bilibili.com/video/\${video.bvid}'" 
+                         style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">
+                      <div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">
+                        <img src="\${video.pic}@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">
+                        <span style="position:absolute; bottom:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">
+                          \${Math.floor(video.duration/60)}:\${(video.duration%60).toString().padStart(2,'0')}
+                        </span>
+                      </div>
+                      <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">
+                        <div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">
+                          \${video.title}
+                        </div>
+                        <div style="font-size:12px; color:#999;">
+                          UP: \${video.owner.name}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              \`;
-            });
-            
-            html += '</div>';
-            document.body.innerHTML = html;
-          })
-          .catch(err => {
-            document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
-          });
+                  \`;
+                });
+                
+                html += '</div>';
+                document.body.innerHTML = html;
+              })
+              .catch(err => {
+                if (retry > 0) {
+                    setTimeout(() => fetchWatchLater(retry - 1), 1000);
+                } else {
+                    document.body.innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
+                }
+              });
+        }
+        
+        fetchWatchLater();
       `);
     }
     
   });
 });
 // ==========================================
+
