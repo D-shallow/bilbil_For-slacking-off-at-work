@@ -407,7 +407,7 @@ app.on('web-contents-created', (e, contents) => {
       },
       { type: 'separator' },
       {
-        label: '✨ D-shallow',
+        label: '✨ IsllaTOd',
         enabled: false
       }
     ]);
