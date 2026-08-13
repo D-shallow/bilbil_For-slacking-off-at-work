@@ -18,6 +18,7 @@ https://nodejs.org/zh-cn/download
 $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
 npm install
 ```
+## 启动后请耐心等待直白屏结束，结束后才能正常隐藏，不然有概率会一直白屏
 ```
 npm start
 ```
