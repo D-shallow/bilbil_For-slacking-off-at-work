@@ -393,14 +393,15 @@ app.on('web-contents-created', (e, contents) => {
           contents.loadURL('https://t.bilibili.com/'); 
         }
       },
+      { label: '🔴 正在直播', click: () => contents.loadURL('https://live.bilibili.com/moyu-live') },
       {
-        label: '📺 我的稍后再看',
+        label: '📺 稍后再看',
         click: () => {
           contents.loadURL('https://www.bilibili.com/watchlater/#/list');
         }
       },
       {
-        label: '🏠 返回 B 站首页',
+        label: '🏠 返回首页',
         click: () => {
           contents.loadURL('https://m.bilibili.com/'); 
         }
@@ -594,6 +595,94 @@ app.on('web-contents-created', (e, contents) => {
       `);
     }
     
+  });
+});
+// ==========================================
+// --- 右键增加正在直播  ---
+// ==========================================
+app.on('web-contents-created', (e, contents) => {
+  contents.on('did-navigate', (event, url) => {
+    
+    // -----------------------------------------
+    // 触发功能：获取正在直播列表
+    // -----------------------------------------
+    if (url.includes('live.bilibili.com/moyu-live')) {
+      contents.executeJavaScript(`
+        (function() {
+          document.open();
+          document.write('<html><head><meta charset="utf-8"><title>正在直播</title></head><body style="background:#f4f4f4;margin:0;"><div id="my-app"><h3 style="padding:20px;text-align:center;color:#999;">正在获取直播列表...</h3></div></body></html>');
+          document.close();
+
+          function fetchLive(retry) {
+              fetch('https://api.live.bilibili.com/xlive/web-ucenter/v1/xfetter/GetWebList?page=1&page_size=10')
+                .then(res => res.json())
+                .then(res => {
+                  if(res.code !== 0) {
+                    if (retry > 0) return setTimeout(() => fetchLive(retry - 1), 1000);
+                    document.getElementById('my-app').innerHTML = '<div style="padding:40px; text-align:center;"><h3 style="color:red; margin-bottom:15px;">尚未登录或登录态未生效</h3><a href="https://passport.bilibili.com/login" style="display:inline-block; padding:10px 20px; background:#00aeec; color:#fff; text-decoration:none; border-radius:4px; font-weight:bold;">点此前往登录 B 站</a></div>';
+                    return;
+                  }
+                  
+                  var rooms = (res.data && res.data.rooms) || [];
+                  if (rooms.length === 0) {
+                      document.getElementById('my-app').innerHTML = '<h3 style="padding:40px; text-align:center; color:#999;">当前没有关注的主播开播哦~</h3>';
+                      return;
+                  }
+
+                  var htmlStr = '<div style="padding:10px; box-sizing:border-box;">';
+                  rooms.forEach(function(room) {
+                    var roomId = room.room_id;
+                    var title = room.title;
+                    var cover = room.cover_from_user || room.keyframe;
+                    var upName = room.uname;
+                    
+                    htmlStr += '<div onclick="window.location.href=\\'https://live.bilibili.com/' + roomId + '\\'" style="display:flex; background:#fff; padding:10px; border-radius:8px; margin-bottom:12px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.05);">';
+                    htmlStr += '<div style="width:130px; height:75px; flex-shrink:0; margin-right:10px; position:relative;">';
+                    htmlStr += '<img src="' + cover + '@300w.jpg" style="width:100%; height:100%; border-radius:4px; object-fit:cover;">';
+                    htmlStr += '<span style="position:absolute; bottom:4px; right:4px; background:#ff6699; color:#fff; font-size:11px; padding:2px 4px; border-radius:2px;">LIVE</span>';
+                    htmlStr += '</div>';
+                    htmlStr += '<div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;">';
+                    htmlStr += '<div style="font-size:14px; font-weight:bold; color:#222; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all;">' + title + '</div>';
+                    htmlStr += '<div style="font-size:12px; color:#999;">主播: ' + upName + '</div>';
+                    htmlStr += '</div></div>';
+                  });
+                  htmlStr += '</div>';
+                  document.getElementById('my-app').innerHTML = htmlStr;
+                })
+                .catch(err => {
+                  if (retry > 0) setTimeout(() => fetchLive(retry - 1), 1000);
+                  else document.getElementById('my-app').innerHTML = '<h3 style="padding:20px; color:red; text-align:center;">网络断开了...</h3>';
+                });
+          }
+          fetchLive(2);
+        })();
+        void 0; 
+      `).catch(() => {});
+    }
+
+    // -----------------------------------------
+    // 直播间极简净化 (仅保留纯净视频画面)
+    // -----------------------------------------
+    if (url.match(/live\.bilibili\.com\/(?:blanc\/)?\d+/)) {
+      contents.executeJavaScript(`
+        var liveStyle = document.createElement('style');
+        liveStyle.innerHTML = \`
+          /* 彻底隐藏所有的导航栏、聊天栏、礼物打赏栏和悬浮控件 */
+          #head-info-vm, .bilibili-live-player-video-controller, header, 
+          .aside-area, .chat-history-panel, .right-container, 
+          .gift-control-section, .rank-list-ctnr, .link-toast, 
+          .combo-toast-cntr, .pay-gift-panel, .bottom-area,
+          .side-bar-cntr, .popular-and-hot-rank { 
+              display: none !important; 
+          }
+          /* 去除页面滚动条和最小宽度限制，让视频铺满 */
+          body, html { background: #000 !important; min-width: 0 !important; overflow: hidden !important; }
+        \`;
+        document.head.appendChild(liveStyle);
+        void 0;
+      `).catch(() => {});
+    }
+
   });
 });
 // ==========================================
