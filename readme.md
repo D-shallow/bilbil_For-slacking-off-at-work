@@ -26,15 +26,6 @@ npm install
 npm start
 ```
 
-## 使用electron-builder打包
-
-```
-npm run win64
-npm run win32
-npm run mac
-```
----
-
 ##  **Acknowledgements**
 
 本项目是基于原作者开源的桌面悬浮摸鱼项目 (https://github.com/chitosai/bilimini#for-developers)进行的二次开发与修复版本。
