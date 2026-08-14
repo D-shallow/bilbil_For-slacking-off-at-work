@@ -15,6 +15,10 @@ https://nodejs.org/zh-cn/download
 ## For Developers
 
 ```
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+```
 $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
 npm install
 ```
